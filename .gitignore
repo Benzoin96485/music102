@@ -1,3 +1,6 @@
 __pycache__
 POP909/pop909_pickle/*
 POP909/pop909_xml/*
+POP909/model_train/*
+*.sh
+*.out
