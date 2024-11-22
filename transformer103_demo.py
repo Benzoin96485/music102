@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
 import math
+import numpy as np
 import copy
 import pandas as pd
 from tqdm import tqdm
@@ -141,7 +142,7 @@ class EmbedHead(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout):
         super(Transformer, self).__init__()
-        self.encoder_embedding = EmbedHead(src_vocab_size + 1, d_model, d_model, d_model)
+        self.encoder_embedding = EmbedHead(src_vocab_size, d_model, d_model, d_model)
         self.decoder_embedding = EmbedHead(tgt_vocab_size + 1, d_model, d_model, d_model)
         self.positional_encoding = PositionalEncoding(d_model)
 
@@ -190,7 +191,7 @@ if __name__ == "__main__":
     max_seq_length = 2400
     dropout = 0.1
     batchsize = 16
-    mode = "train"
+    mode = "inference"
 
     #writer = SummaryWriter('.log')
 
@@ -220,7 +221,7 @@ if __name__ == "__main__":
         
         #print(tgt_data[0].shape, rates[0].shape)
         # Concatenate `rates` as an additional feature to `src_data`
-        src_data = [torch.cat([s, r[:-1, None]], dim=-1) for s, r in zip(src_data, rates)]
+        src_data = [torch.cat([s], dim=-1) for s, r in zip(src_data, rates)]
         
         
         # Create `tgt_data_with_rates` with a one-step delay for `rates`
@@ -272,3 +273,68 @@ if __name__ == "__main__":
 
             if (epoch + 1) % 10 == 0:
                 torch.save(transformer, f"model_{epoch + 1}.pt")
+    
+    if mode == 'inference':
+        # inference step
+        transformer.eval()
+        transformer.load_state_dict(torch.load("model_60.pt").state_dict())
+        tot_loss = 0
+
+        for i, pair_data in tqdm(enumerate(testset)):
+            if i == 10:
+                break
+            idx, src_data, tgt_data_with_rates = pair_data
+            idx = idx[0]
+            #generated_tgt = []
+            #print(tgt_data_with_rates.shape)
+            current_tgt = tgt_data_with_rates[:, :1, :]  # Use the first step as a starting point
+            timer = 1
+
+            for t in range(1, tgt_data_with_rates.size(1)):  # Generate timestep by timestep
+                output = transformer(src_data, current_tgt).detach()
+                #print(output.shape)
+                rate_prediction = output[:, -1, -1].item()  # Assuming the last feature is the rate
+                tgt_prediction = output[:, -1, :]  # Assuming other features are `tgt_data`
+
+                # Calculate the dynamic threshold for flipping
+                flip_threshold = 1 / (timer + 1)
+
+                # Determine where to flip
+                #print(flip_threshold, rate_prediction)
+                flip_mask = (rate_prediction < flip_threshold)
+
+                # Update next target based on flip mask
+                next_tgt = tgt_prediction.clone()
+                probabilities = next_tgt[:, :12]  # First 12 values are probabilities
+                sampled_binary = torch.bernoulli(probabilities)  # Randomly sample 0 or 1 based on probabilities
+                next_tgt[:, :12] = sampled_binary
+                #print(next_tgt)
+
+                # Update the timer
+                if flip_mask or np.random.random() < 0.2:
+                    next_tgt[:, -1] = 1
+                    timer = 1
+                else:
+                    next_tgt = current_tgt[:, -1, :].clone()
+                    next_tgt[:, -1] = flip_threshold
+                    timer += 1
+
+                # generated_tgt.append(next_tgt)
+                current_tgt = torch.cat([current_tgt, next_tgt.unsqueeze(1)], dim=1)
+
+
+            # Compute loss if necessary
+            loss = criterion(current_tgt[:, 1:, :].contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
+            tot_loss += loss.item()
+
+            torch.save(current_tgt, f'../../song_{idx}.pt')
+'''
+            # Optional: Save or analyze the generated sequences
+            print(f"Index: {idx}, Loss: {loss.item()}")
+            
+
+        print(f"Total Loss: {tot_loss / len(testset)}")
+'''
+
+
+
