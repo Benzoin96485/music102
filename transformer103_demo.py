@@ -256,7 +256,7 @@ if __name__ == "__main__":
                 output = transformer(src_data, tgt_data_with_rates[:, :-1, :])
                 #print(output.shape, tgt_data_with_rates.shape)
                 loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
-                loss -= criterion(output[:, :, :-1].contiguous().view(-1), cur_coord.contiguous().view(-1))
+                loss -= 0.5*nn.functional.mse_loss(output[:, :, :-1].contiguous().view(-1), cur_coord.contiguous().view(-1))
 
                 loss.backward()
                 optimizer.step()
@@ -283,7 +283,7 @@ if __name__ == "__main__":
     elif mode == 'inference':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_30.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_30_regularized.pt").state_dict())
         tot_loss = 0
 
         for i, pair_data in tqdm(enumerate(testset)):
