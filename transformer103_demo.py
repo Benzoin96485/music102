@@ -252,7 +252,8 @@ if __name__ == "__main__":
                 # Use tgt_data_with_rates as input to the transformer
                 output = transformer(src_data, tgt_data_with_rates[:, :-1, :])
                 #print(output.shape, tgt_data_with_rates.shape)
-                loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
+                loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1)) \
+
                 loss.backward()
                 optimizer.step()
                 '''
@@ -303,11 +304,13 @@ if __name__ == "__main__":
                 sampled_binary = torch.bernoulli(probabilities)  # Randomly sample 0 or 1 based on probabilities
                 next_tgt[:, :12] = sampled_binary
                 #print(next_tgt)
-
+                #print(prev_rate, cur_rate, future_rate)
                 # Update the timer
                 if future_rate > cur_rate and cur_rate < prev_rate:
                     next_tgt[:, -1] = 0.8
                     prev_rate, cur_rate = cur_rate, 0.8
+                    print(sampled_binary[0, :])
+                    print(current_tgt[0:, -1, :])
                 else:
                     next_tgt = current_tgt[:, -1, :].clone()
                     next_tgt[:, -1] = future_rate
