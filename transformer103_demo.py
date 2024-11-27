@@ -311,7 +311,7 @@ if __name__ == "__main__":
                 #print(next_tgt)
 
                 # Update the timer
-                if flip_mask or np.random.random() < 0.2:
+                if flip_mask or timer == 8:
                     next_tgt[:, -1] = 1
                     timer = 1
                 else:
