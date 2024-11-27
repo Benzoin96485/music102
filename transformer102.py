@@ -9,10 +9,12 @@ from tqdm import tqdm
 from os.path import exists
 from os import remove, chdir
 import pickle
-from torch.utils.tensorboard import SummaryWriter
+# rom torch.utils.tensorboard import SummaryWriter
+from pretty_midi import PrettyMIDI, instrument_name_to_program, Instrument, note_name_to_number, Note
+from os import system
 # from synthesizer import parse_csv, synthesize # functions in synthesizer.ipynb, PrettyMiDI and MuseScore needed
 
-DEVICE = "cuda"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 EPS = 1e-9
 VERSION="3-7"
 
@@ -288,6 +290,42 @@ class Transformer(nn.Module):
         logit = torch.sigmoid(output)
         return logit
 
+
+def parse_csv(csv_file):
+    df = pd.read_csv(csv_file)
+    chords = df["chord"].apply(lambda x: eval(x.replace(".", ","))).to_list()
+    beats = df["time"].to_list()
+    durations = df["duration"].to_list()
+    return chords, beats, durations
+
+
+def synthesize(midi_file, chords, beats, durations, output, instrument="String Ensemble 1", velocity=50, group=3, melody_only=True, to_mp3=False):
+    KEYS = ("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B")
+    midi_data = PrettyMIDI(midi_file)
+    if melody_only:
+        midi_data.instruments = [midi_data.instruments[0]]
+    program = instrument_name_to_program(instrument)
+    accompany = Instrument(program=program, name="accompany")
+    old_chord = []
+    for chord, beat, duration in zip(chords + [[]], beats + [0], durations + [0]):
+        if chord != old_chord:
+            if old_chord:
+                for bit, key in zip(old_chord, KEYS):
+                    if bit:
+                        note_number = note_name_to_number(f"{key}{group}")
+                        note = Note(velocity=velocity, pitch=note_number, start=old_beat, end=old_beat+total_duration)
+                        accompany.notes.append(note)
+            old_beat = beat
+            total_duration = duration
+            old_chord = chord
+        else:
+            total_duration += duration
+    midi_data.instruments.append(accompany)
+    midi_data.write(output)
+    if to_mp3:
+        system(f"Musescore4 {output} -o {output.replace('mid', 'mp3')}")
+
+
 if __name__ == "__main__":
     input_mult = {k: 1 for k in D12_Q}
     model_mult = {k: 64 for k in D12_Q}
@@ -295,9 +333,9 @@ if __name__ == "__main__":
     num_layers = 4
     dropout = 0
     batchsize = 8
-    mode = "train"
+    mode = "eval"
 
-    writer = SummaryWriter(f'.log-tf{VERSION}')
+    # writer = SummaryWriter(f'.log-tf{VERSION}')
 
     transformer = Transformer(input_mult, model_mult, num_heads, num_layers, model_mult, dropout, D12_Q).to(DEVICE)
 
@@ -420,15 +458,17 @@ if __name__ == "__main__":
 
     elif mode == "eval":
         transformer.eval()
-        transformer.load_state_dict(torch.load("model2_best.pt").state_dict())
+        transformer.load_state_dict(torch.load("model3-7_best.pt", map_location=DEVICE).state_dict())
         # tot_loss = 0
-        for i, pair_data in tqdm(enumerate(trainset)):
+        for i, pair_data in tqdm(enumerate(testset)):
             idx, src_data, tgt_data, weights = pair_data
             idx = idx[0]
-            output = transformer(src_data, tgt_data).detach()
+            if idx != "017":
+                continue
+            output = transformer(src_data).detach()
             
             print(loss_fn(output, tgt_data, weights))
             chords = torch.round(output).squeeze().cpu().numpy().tolist()
             real_chords, beats, durations = parse_csv(f"POP909/POP909/{idx}/melody_chord_1_beat.csv")
-            synthesize(f"POP909/POP909/{idx}/{idx}.mid", chords, beats, durations, f"../gen/test_m2/test_{idx}_m2mlp_best_ns.mid", to_mp3=False)
+            synthesize(f"POP909/POP909/{idx}/{idx}.mid", chords, beats, durations, f"test_{idx}_music102.mid", to_mp3=False)
             
