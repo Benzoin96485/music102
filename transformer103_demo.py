@@ -255,9 +255,9 @@ if __name__ == "__main__":
                 # Use tgt_data_with_rates as input to the transformer
                 output = transformer(src_data, tgt_data_with_rates[:, :-1, :])
                 #print(output.shape, tgt_data_with_rates.shape)
-                loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
-                loss -= 0.5*nn.functional.mse_loss(output[:, :, :-1].contiguous().view(-1), cur_coord.contiguous().view(-1))
-
+                loss1 = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
+                loss2 = 0.5*torch.mean(torch.max(torch.abs(output[:, :, :-1] - cur_coord), dim=-1)[0])
+                loss = loss1 - loss2
                 loss.backward()
                 optimizer.step()
                 '''
@@ -275,7 +275,7 @@ if __name__ == "__main__":
                 optimizer.step()'''
 
                 #writer.add_scalar("loss", loss, global_step=epoch + (i + 1) * batchsize / 710)
-            print(f"Epoch: {epoch+1}, Loss: {loss.item()}")
+            print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, Loss: {loss.item()}")
 
             if (epoch + 1) % 10 == 0:
                 torch.save(transformer, f"model_{epoch + 1}_regularized.pt")
