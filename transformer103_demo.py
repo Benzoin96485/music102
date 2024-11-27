@@ -239,12 +239,14 @@ if __name__ == "__main__":
         return idx, src_data, tgt_data_with_rates, cur_label#, tgt_data
 
     
-    trainset = data.DataLoader(trainset, batch_size=batchsize, collate_fn=collate_fn)
+    
     validset = data.DataLoader(validset, batch_size=1, collate_fn=collate_fn)
     testset = data.DataLoader(testset, batch_size=1, collate_fn=collate_fn)
 
     criterion = nn.BCELoss(reduction="mean")
     if mode == "train": 
+        trainset = data.DataLoader(trainset, batch_size=batchsize, collate_fn=collate_fn)
+
         optimizer = optim.Adam(transformer.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
         transformer.train()
 
@@ -286,8 +288,12 @@ if __name__ == "__main__":
         transformer.load_state_dict(torch.load("model_30_regularized.pt").state_dict())
         tot_loss = 0
 
-        for i, pair_data in tqdm(enumerate(testset)):
-            if i == 10:
+        ## for fake testing only
+        trainset = data.DataLoader(trainset, batch_size=1, collate_fn=collate_fn)
+        ###
+        
+        for i, pair_data in tqdm(enumerate(trainset)):
+            if i == 3:
                 break
             idx, src_data, tgt_data_with_rates, _ = pair_data
             idx = idx[0]
