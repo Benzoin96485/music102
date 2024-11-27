@@ -10,6 +10,7 @@ from tqdm import tqdm
 from os.path import exists
 from os import remove, chdir
 import pickle
+from matplotlib import pyplot as plt
 #from torch.utils.tensorboard import SummaryWriter
 #from synthesizer import parse_csv, synthesize
 
@@ -274,7 +275,7 @@ if __name__ == "__main__":
             if (epoch + 1) % 10 == 0:
                 torch.save(transformer, f"model_{epoch + 1}.pt")
     
-    if mode == 'inference':
+    elif mode == 'inference':
         # inference step
         transformer.eval()
         transformer.load_state_dict(torch.load("model_60.pt").state_dict())
@@ -288,20 +289,13 @@ if __name__ == "__main__":
             #generated_tgt = []
             #print(tgt_data_with_rates.shape)
             current_tgt = tgt_data_with_rates[:, :1, :]  # Use the first step as a starting point
-            timer = 1
+            prev_rate, cur_rate = 1, 1
 
             for t in range(1, tgt_data_with_rates.size(1)):  # Generate timestep by timestep
                 output = transformer(src_data, current_tgt).detach()
                 #print(output.shape)
-                rate_prediction = output[:, -1, -1].item()  # Assuming the last feature is the rate
+                future_rate = output[:, -1, -1].item()  # Assuming the last feature is the rate
                 tgt_prediction = output[:, -1, :]  # Assuming other features are `tgt_data`
-
-                # Calculate the dynamic threshold for flipping
-                flip_threshold = 1 / (timer + 1)
-
-                # Determine where to flip
-                #print(flip_threshold, rate_prediction)
-                flip_mask = (rate_prediction < flip_threshold)
 
                 # Update next target based on flip mask
                 next_tgt = tgt_prediction.clone()
@@ -311,30 +305,44 @@ if __name__ == "__main__":
                 #print(next_tgt)
 
                 # Update the timer
-                if flip_mask or timer == 8:
-                    next_tgt[:, -1] = 1
-                    timer = 1
+                if future_rate > cur_rate and cur_rate < prev_rate:
+                    next_tgt[:, -1] = 0.8
+                    prev_rate, cur_rate = cur_rate, 0.8
                 else:
                     next_tgt = current_tgt[:, -1, :].clone()
-                    next_tgt[:, -1] = flip_threshold
-                    timer += 1
+                    next_tgt[:, -1] = future_rate
+                    prev_rate, cur_rate = cur_rate, future_rate
 
                 # generated_tgt.append(next_tgt)
                 current_tgt = torch.cat([current_tgt, next_tgt.unsqueeze(1)], dim=1)
-
 
             # Compute loss if necessary
             loss = criterion(current_tgt[:, 1:, :].contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
             tot_loss += loss.item()
 
             torch.save(current_tgt, f'../../song_{idx}.pt')
-'''
-            # Optional: Save or analyze the generated sequences
-            print(f"Index: {idx}, Loss: {loss.item()}")
-            
 
-        print(f"Total Loss: {tot_loss / len(testset)}")
-'''
+    elif mode == 'debugging':
+        # inference step
+        transformer.eval()
+        transformer.load_state_dict(torch.load("model_60.pt").state_dict())
+        tot_loss = 0
 
-
-
+        for i, pair_data in tqdm(enumerate(testset)):
+            if i == 3:
+                break
+            idx, src_data, tgt_data_with_rates = pair_data
+            # Use tgt_data_with_rates as input to the transformer
+            output = transformer(src_data, tgt_data_with_rates[:, :-1, :])
+            #print(output.shape, tgt_data_with_rates.shape)
+            loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
+            print(loss)
+            t1 = output[0, :, -1].contiguous().view(-1).detach().cpu().numpy()
+            t2 = tgt_data_with_rates[0, 1:, -1].contiguous().view(-1).detach().cpu().numpy()
+            N = len(t1)
+            plt.figure(figsize=(12, 3))
+            plt.plot(range(N), t1, label='prediction')
+            plt.plot(range(N), t2, label='truth')
+            plt.legend()
+            plt.savefig(f'{i}.jpg')
+            plt.show()
