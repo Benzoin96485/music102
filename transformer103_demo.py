@@ -192,7 +192,7 @@ if __name__ == "__main__":
     max_seq_length = 2400
     dropout = 0.1
     batchsize = 16
-    mode = "inference"
+    mode = input('Mode=train/inference/debugging?GEEE! : ')
 
     #writer = SummaryWriter('.log')
 
@@ -212,14 +212,15 @@ if __name__ == "__main__":
     
     def collate_fn(batch):
         # Unpack batch into individual components
-        idx, rates, tgt_data, src_data = zip(*batch)
+        idx, rates, tgt_data, src_data, cur_label = zip(*batch)
         #print(len(rates[0]), len(tgt_data[0]), len(src_data[0]))
         
         # Convert `src_data`, `tgt_data`, and `rates` to tensors if they are not already
         src_data = [torch.tensor(s, dtype=torch.float32) if not isinstance(s, torch.Tensor) else s for s in src_data]
         tgt_data = [torch.tensor(t, dtype=torch.float32) if not isinstance(t, torch.Tensor) else t for t in tgt_data]
         rates = [torch.tensor(r, dtype=torch.float32) if not isinstance(r, torch.Tensor) else r for r in rates]
-        
+        cur_label = [torch.tensor(l, dtype=torch.float32) if not isinstance(l, torch.Tensor) else l for l in cur_label]
+
         #print(tgt_data[0].shape, rates[0].shape)
         # Concatenate `rates` as an additional feature to `src_data`
         src_data = [torch.cat([s], dim=-1) for s, r in zip(src_data, rates)]
@@ -231,9 +232,11 @@ if __name__ == "__main__":
         # Pad sequences to create uniform batch tensors
         src_data = nn.utils.rnn.pad_sequence(src_data, batch_first=True, padding_value=0.).to(DEVICE)
         tgt_data_with_rates = nn.utils.rnn.pad_sequence(tgt_data_with_rates, batch_first=True, padding_value=0.).to(DEVICE)
+        cur_label = nn.utils.rnn.pad_sequence(cur_label, batch_first=True, padding_value=0.).to(DEVICE)
+
         #tgt_data = nn.utils.rnn.pad_sequence(tgt_data, batch_first=True, padding_value=0.).to(DEVICE)
         
-        return idx, src_data, tgt_data_with_rates#, tgt_data
+        return idx, src_data, tgt_data_with_rates, cur_label#, tgt_data
 
     
     trainset = data.DataLoader(trainset, batch_size=batchsize, collate_fn=collate_fn)
@@ -247,12 +250,13 @@ if __name__ == "__main__":
 
         for epoch in tqdm(range(200)):
             for i, pair_data in tqdm(enumerate(trainset)):
-                idx, src_data, tgt_data_with_rates = pair_data
+                idx, src_data, tgt_data_with_rates, cur_coord = pair_data
                 optimizer.zero_grad()
                 # Use tgt_data_with_rates as input to the transformer
                 output = transformer(src_data, tgt_data_with_rates[:, :-1, :])
                 #print(output.shape, tgt_data_with_rates.shape)
-                loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1)) \
+                loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
+                loss -= criterion(output[:, :, :-1].contiguous().view(-1), cur_coord.contiguous().view(-1))
 
                 loss.backward()
                 optimizer.step()
@@ -274,18 +278,18 @@ if __name__ == "__main__":
             print(f"Epoch: {epoch+1}, Loss: {loss.item()}")
 
             if (epoch + 1) % 10 == 0:
-                torch.save(transformer, f"model_{epoch + 1}.pt")
+                torch.save(transformer, f"model_{epoch + 1}_regularized.pt")
     
     elif mode == 'inference':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_60.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_30.pt").state_dict())
         tot_loss = 0
 
         for i, pair_data in tqdm(enumerate(testset)):
             if i == 10:
                 break
-            idx, src_data, tgt_data_with_rates = pair_data
+            idx, src_data, tgt_data_with_rates, _ = pair_data
             idx = idx[0]
             #generated_tgt = []
             #print(tgt_data_with_rates.shape)
@@ -309,8 +313,6 @@ if __name__ == "__main__":
                 if future_rate > cur_rate and cur_rate < prev_rate:
                     next_tgt[:, -1] = 0.8
                     prev_rate, cur_rate = cur_rate, 0.8
-                    print(sampled_binary[0, :])
-                    print(current_tgt[0:, -1, :])
                 else:
                     next_tgt = current_tgt[:, -1, :].clone()
                     next_tgt[:, -1] = future_rate
@@ -323,12 +325,12 @@ if __name__ == "__main__":
             loss = criterion(current_tgt[:, 1:, :].contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
             tot_loss += loss.item()
 
-            torch.save(current_tgt, f'../../song_{idx}.pt')
+            torch.save(current_tgt, f'../../song_{idx}_regularized.pt')
 
     elif mode == 'debugging':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_60.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_30.pt").state_dict())
         tot_loss = 0
 
         for i, pair_data in tqdm(enumerate(testset)):
