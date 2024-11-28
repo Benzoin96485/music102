@@ -154,8 +154,8 @@ class Transformer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def generate_mask(self, src, tgt):
-        src_mask = (torch.sum(src, dim=2) >= 0).unsqueeze(1).unsqueeze(2)
-        tgt_mask = (torch.sum(tgt, dim=2) >= 0).unsqueeze(1).unsqueeze(3)
+        src_mask = (torch.sum(src, dim=2) > 0).unsqueeze(1).unsqueeze(2)
+        tgt_mask = (torch.sum(tgt, dim=2) > 0).unsqueeze(1).unsqueeze(3)
         seq_length = tgt.size(1)
         if self.training:
             d = torch.randint(-14, 2, (1,)).item()
@@ -226,19 +226,22 @@ if __name__ == "__main__":
         src_data = nn.utils.rnn.pad_sequence(src_data, batch_first=True, padding_value=0.).to(DEVICE)
 
         # Pad tgt_data
-        tgt_data_padded = nn.utils.rnn.pad_sequence(tgt_data, batch_first=True, padding_value=0).to(DEVICE)
+        tgt_data_padded = nn.utils.rnn.pad_sequence(tgt_data, batch_first=True, padding_value=-1).to(DEVICE)
 
         # Extract the last dimension and one-hot encode it
         tgt_last_dim = tgt_data_padded[:, :, -1]  # Shape: (batch_size, sequence_length)
         num_classes = 9  # Number of classes (0-8)
         tgt_last_dim_onehot = nn.functional.one_hot(torch.clamp(tgt_last_dim, min=0).long(), num_classes=num_classes).float()
-        #tgt_last_dim_onehot[tgt_last_dim == -1] = 0  # Reset padding values to zeros in one-hot representation
+          # Reset padding values to zeros in one-hot representation
 
         # Concatenate one-hot encoding with the remaining dimensions of tgt_data
         tgt_data_remaining = tgt_data_padded[:, :, :-1]  # Exclude the last dimension
         tgt_data_concat = torch.cat([tgt_data_remaining, tgt_last_dim_onehot], dim=-1)  # Concatenate along the last axis
+        tgt_data_concat[tgt_last_dim == -1] = 0.
 
-        return idx, src_data, tgt_data_concat, tgt_last_dim.long()
+        tgt_cls_label = tgt_last_dim.clone().long()
+        tgt_cls_label[tgt_last_dim == -1] = 0
+        return idx, src_data, tgt_data_concat, tgt_cls_label
 
     
     validset = data.DataLoader(validset, batch_size=1, collate_fn=collate_fn)
@@ -251,7 +254,7 @@ if __name__ == "__main__":
 
         optimizer = optim.Adam(transformer.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
         transformer.train()
-
+        k = 1
         for epoch in tqdm(range(200)):
             for i, pair_data in tqdm(enumerate(trainset)):
                 idx, src_data, tgt_data, tgt_cls_label = pair_data
@@ -270,7 +273,8 @@ if __name__ == "__main__":
                 #loss2 = nn.functional.mse_loss(torch.sigmoid(output[:, :, -1]), tgt_data[:, 1:, -1]/8, reduction='none')
                 #loss2 = (loss2 * weights).mean()
 
-                loss = loss1 + loss2
+                loss = loss1 + k * loss2
+                k *= 0.96
                 loss.backward()
                 optimizer.step()
                 '''
@@ -288,7 +292,7 @@ if __name__ == "__main__":
                 optimizer.step()'''
 
                 #writer.add_scalar("loss", loss, global_step=epoch + (i + 1) * batchsize / 710)
-            print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, Loss: {loss.item()}")
+            print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, k: {k}, Loss: {loss.item()}")
 
             if (epoch + 1) % 10 == 0:
                 torch.save(transformer, f"model_{epoch + 1}_regularized.pt")
@@ -296,7 +300,7 @@ if __name__ == "__main__":
     elif mode == 'inference':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_150_regularized.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_60_regularized.pt").state_dict())
         tot_loss = 0
 
         ## for fake testing only
