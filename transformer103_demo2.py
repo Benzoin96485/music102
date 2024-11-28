@@ -274,7 +274,7 @@ if __name__ == "__main__":
                 #loss2 = (loss2 * weights).mean()
 
                 loss = loss1 + k * loss2
-                k *= 0.96
+                
                 loss.backward()
                 optimizer.step()
                 '''
@@ -293,7 +293,7 @@ if __name__ == "__main__":
 
                 #writer.add_scalar("loss", loss, global_step=epoch + (i + 1) * batchsize / 710)
             print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, k: {k}, Loss: {loss.item()}")
-
+            k *= 0.96
             if (epoch + 1) % 10 == 0:
                 torch.save(transformer, f"model_{epoch + 1}_regularized.pt")
     
