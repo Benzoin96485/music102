@@ -157,10 +157,11 @@ class Transformer(nn.Module):
         src_mask = (torch.sum(src, dim=2) > 0).unsqueeze(1).unsqueeze(2)
         tgt_mask = (torch.sum(tgt, dim=2) > 0).unsqueeze(1).unsqueeze(3)
         seq_length = tgt.size(1)
-        if self.training:
-            d = torch.randint(-14, 2, (1,)).item()
-        else:
-            d = 1
+        d = 1
+        # if self.training:
+        #     d = torch.randint(-14, 2, (1,)).item()
+        # else:
+        #     d = 1
         nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length), diagonal=d)).bool().to(DEVICE)
         tgt_mask = tgt_mask & nopeak_mask
         return src_mask, tgt_mask
@@ -300,7 +301,7 @@ if __name__ == "__main__":
     elif mode == 'inference':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_60_regularized.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_100_regularized.pt").state_dict())
         tot_loss = 0
 
         ## for fake testing only
