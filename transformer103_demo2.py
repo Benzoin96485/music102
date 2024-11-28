@@ -308,7 +308,7 @@ if __name__ == "__main__":
         trainset = data.DataLoader(trainset, batch_size=1, collate_fn=collate_fn)
         ###
         
-        for i, pair_data in tqdm(enumerate(trainset)):
+        for i, pair_data in tqdm(enumerate(testset)):
             if i == 3:
                 break
             idx, src_data, tgt_data, tgt_cls_label = pair_data
