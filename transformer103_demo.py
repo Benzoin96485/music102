@@ -157,10 +157,8 @@ class Transformer(nn.Module):
         src_mask = (torch.sum(src, dim=2) >= 0).unsqueeze(1).unsqueeze(2)
         tgt_mask = (torch.sum(tgt, dim=2) >= 0).unsqueeze(1).unsqueeze(3)
         seq_length = tgt.size(1)
-        if self.training:
-            d = torch.randint(-14, 2, (1,)).item()
-        else:
-            d = 1
+        
+        d = 1
         nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length), diagonal=d)).bool().to(DEVICE)
         tgt_mask = tgt_mask & nopeak_mask
         return src_mask, tgt_mask
@@ -249,7 +247,7 @@ if __name__ == "__main__":
 
         optimizer = optim.Adam(transformer.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
         transformer.train()
-
+        k = 1
         for epoch in tqdm(range(200)):
             for i, pair_data in tqdm(enumerate(trainset)):
                 idx, src_data, tgt_data_with_rates, cur_coord = pair_data
@@ -259,7 +257,7 @@ if __name__ == "__main__":
                 #print(output.shape, tgt_data_with_rates.shape)
                 loss1 = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
                 loss2 = 0.5*torch.mean(torch.max(torch.abs(output[:, :, :-1] - cur_coord), dim=-1)[0])
-                loss = loss1 - loss2
+                loss = loss1 - k*loss2
                 loss.backward()
                 optimizer.step()
                 '''
@@ -277,15 +275,15 @@ if __name__ == "__main__":
                 optimizer.step()'''
 
                 #writer.add_scalar("loss", loss, global_step=epoch + (i + 1) * batchsize / 710)
-            print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, Loss: {loss.item()}")
-
+            print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, k: {k}, Loss: {loss.item()}")
+            k *= 0.96
             if (epoch + 1) % 10 == 0:
-                torch.save(transformer, f"model_{epoch + 1}_regularized.pt")
+                torch.save(transformer, f"model_{epoch + 1}_w_rates.pt")
     
     elif mode == 'inference':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_30_regularized.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_60_w_rates.pt").state_dict())
         tot_loss = 0
 
         ## for fake testing only
@@ -331,12 +329,12 @@ if __name__ == "__main__":
             loss = criterion(current_tgt[:, 1:, :].contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
             tot_loss += loss.item()
 
-            torch.save(current_tgt, f'../../song_{idx}_regularized.pt')
+            torch.save(current_tgt, f'../../song_{idx}_w_rates.pt')
 
     elif mode == 'debugging':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_30.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_30_w_rates.pt").state_dict())
         tot_loss = 0
 
         for i, pair_data in tqdm(enumerate(testset)):
