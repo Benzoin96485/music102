@@ -5,3 +5,4 @@ POP909/model_train/*
 *.mid
 *.sh
 *.out
+model_*.pt
