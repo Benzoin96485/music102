@@ -270,13 +270,16 @@ if __name__ == "__main__":
 
     criterion = nn.BCELoss(reduction="mean")
     loss_new = nn.CrossEntropyLoss()
+    
     if mode == "train": 
         trainset = data.DataLoader(trainset, batch_size=batchsize, collate_fn=collate_fn)
 
         optimizer = optim.Adam(transformer.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
         transformer.train()
         k = 1
-        for epoch in tqdm(range(100)):
+        min_valid_loss = float('inf')
+        for epoch in tqdm(range(200)):
+            transformer.train()
             for i, pair_data in tqdm(enumerate(trainset)):
                 idx, src_data, tgt_data, tgt_cls_label = pair_data
                 optimizer.zero_grad()
@@ -284,39 +287,38 @@ if __name__ == "__main__":
                 output = transformer(src_data, tgt_data[:, :-1, :])
                 # print(output.shape, tgt_data.shape)
                 loss1 = criterion(output[:, :, :12].contiguous().view(-1), tgt_data[:, 1:, :12].contiguous().view(-1))
-                #print(tgt_data[:, 1:, -1])
-                #print(output[:, :, 12:].reshape(-1, 9))
-                #print(tgt_data[:, 1:, 12:].reshape(-1, 9))
-                #print(tgt_cls_label[:, 1:])
                 loss2 = loss_new(output[:, :, 12:].reshape(-1, 9), tgt_cls_label[:, 1:].reshape(-1))
-
-                #weights = 1 + tgt_data[:, 1:, -1]  # Example: Give higher weight to higher values
-                #loss2 = nn.functional.mse_loss(torch.sigmoid(output[:, :, -1]), tgt_data[:, 1:, -1]/8, reduction='none')
-                #loss2 = (loss2 * weights).mean()
-
-                loss = loss1 + k * loss2
+                train_loss = loss1 + k * loss2
                 
-                loss.backward()
+                train_loss.backward()
                 optimizer.step()
-                '''
-                # Match the shapes for loss calculation
-                output = output.contiguous().view(-1)
-                target = tgt_data_with_rates[:, 1:, :].contiguous().view(-1)
+            
+            # model eval
+            transformer.eval()
+            patience = 20
+            total_loss = 0
+            with torch.no_grad():
+                for i, pair_data in enumerate(validset):
+                    idx, src_data, tgt_data, tgt_cls_label = pair_data
+                    output = transformer(src_data, tgt_data[:, :-1, :])
+                    valid_loss1 = criterion(output[:, :, :12].contiguous().view(-1), tgt_data[:, 1:, :12].contiguous().view(-1))
+                    valid_loss2 = loss_new(output[:, :, 12:].reshape(-1, 9), tgt_cls_label[:, 1:].reshape(-1))
+                    valid_loss = valid_loss1 + 0.25 * valid_loss2
+                    total_loss += valid_loss.item()
+                avg_valid_loss = total_loss / len(validset)
 
-                # Ensure target and output have the same shape
-                min_len = min(output.size(0), target.size(0))
-                output = output[:min_len]
-                target = target[:min_len]
+            # early stopping
+            if avg_valid_loss < min_valid_loss:
+                min_valid_loss = avg_valid_loss
+                wait = 0
+            else:
+                wait += 1
+            print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, k: {k}, Loss: {train_loss.item()}, ValidLoss: {avg_valid_loss}")
+            if wait >= patience:
+                break
 
-                loss = criterion(output, target)
-                loss.backward()
-                optimizer.step()'''
-
-                #writer.add_scalar("loss", loss, global_step=epoch + (i + 1) * batchsize / 710)
-            print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, k: {k}, Loss: {loss.item()}")
-            k *= 0.96
-            if (epoch + 1) % 25 == 0:
-                torch.save(transformer, f"model_{epoch + 1}_time_encoding.pt")
+            k *= 0.96            
+        torch.save(transformer, f"model_best_time_encoding.pt")
     
     elif mode == 'inference':
         # inference step
