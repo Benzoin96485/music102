@@ -276,7 +276,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(transformer.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
         transformer.train()
         k = 1
-        for epoch in tqdm(range(200)):
+        for epoch in tqdm(range(100)):
             for i, pair_data in tqdm(enumerate(trainset)):
                 idx, src_data, tgt_data, tgt_cls_label = pair_data
                 optimizer.zero_grad()
@@ -315,13 +315,13 @@ if __name__ == "__main__":
                 #writer.add_scalar("loss", loss, global_step=epoch + (i + 1) * batchsize / 710)
             print(f"Epoch: {epoch+1}, Loss1: {loss1.item()}, Loss2: {loss2.item()}, k: {k}, Loss: {loss.item()}")
             k *= 0.96
-            if (epoch + 1) % 10 == 0:
-                torch.save(transformer, f"model_{epoch + 1}_regularized.pt")
+            if (epoch + 1) % 25 == 0:
+                torch.save(transformer, f"model_{epoch + 1}_time_encoding.pt")
     
     elif mode == 'inference':
         # inference step
         transformer.eval()
-        transformer.load_state_dict(torch.load("model_100_regularized.pt").state_dict())
+        transformer.load_state_dict(torch.load("model_100_time_encoding.pt").state_dict())
         tot_loss = 0
 
         ## for fake testing only
@@ -329,7 +329,7 @@ if __name__ == "__main__":
         ###
         
         for i, pair_data in tqdm(enumerate(testset)):
-            if i == 3:
+            if i == 5:
                 break
             idx, src_data, tgt_data, tgt_cls_label = pair_data
             idx = idx[0]
@@ -357,29 +357,4 @@ if __name__ == "__main__":
             # loss = criterion(current_tgt[:, 1:, :].contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
             # tot_loss += loss.item()
 
-            torch.save(current_tgt, f'../../song_{idx}_regularized.pt')
-
-    elif mode == 'debugging':
-        # inference step
-        transformer.eval()
-        transformer.load_state_dict(torch.load("model_30.pt").state_dict())
-        tot_loss = 0
-
-        for i, pair_data in tqdm(enumerate(testset)):
-            if i == 3:
-                break
-            idx, src_data, tgt_data_with_rates = pair_data
-            # Use tgt_data_with_rates as input to the transformer
-            output = transformer(src_data, tgt_data_with_rates[:, :-1, :])
-            #print(output.shape, tgt_data_with_rates.shape)
-            loss = criterion(output.contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
-            print(loss)
-            t1 = output[0, :, -1].contiguous().view(-1).detach().cpu().numpy()
-            t2 = tgt_data_with_rates[0, 1:, -1].contiguous().view(-1).detach().cpu().numpy()
-            N = len(t1)
-            plt.figure(figsize=(12, 3))
-            plt.plot(range(N), t1, label='prediction')
-            plt.plot(range(N), t2, label='truth')
-            plt.legend()
-            plt.savefig(f'{i}.jpg')
-            plt.show()
+            torch.save(current_tgt, f'../../song_{idx}_time_encoding.pt')
