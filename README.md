@@ -1,4 +1,3 @@
-# music102
-Project for 6.S966
+# Music103 (in development)
 
-
+Project for 6.S978
