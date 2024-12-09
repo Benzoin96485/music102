@@ -9,8 +9,8 @@ from tqdm import tqdm
 from os.path import exists
 from os import remove, chdir
 import pickle
-# rom torch.utils.tensorboard import SummaryWriter
-from pretty_midi import PrettyMIDI, instrument_name_to_program, Instrument, note_name_to_number, Note
+from torch.utils.tensorboard import SummaryWriter
+#from pretty_midi import PrettyMIDI, instrument_name_to_program, Instrument, note_name_to_number, Note
 from os import system
 # from synthesizer import parse_csv, synthesize # functions in synthesizer.ipynb, PrettyMiDI and MuseScore needed
 
@@ -333,9 +333,9 @@ if __name__ == "__main__":
     num_layers = 4
     dropout = 0
     batchsize = 8
-    mode = "eval"
+    mode = "train"
 
-    # writer = SummaryWriter(f'.log-tf{VERSION}')
+    writer = SummaryWriter(f'.log-tf{VERSION}')
 
     transformer = Transformer(input_mult, model_mult, num_heads, num_layers, model_mult, dropout, D12_Q).to(DEVICE)
 

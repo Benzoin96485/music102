@@ -6,3 +6,4 @@ POP909/model_train/*
 *.sh
 *.out
 model_*.pt
+song_*.pt

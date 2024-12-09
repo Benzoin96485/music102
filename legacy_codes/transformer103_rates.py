@@ -180,7 +180,6 @@ class Transformer(nn.Module):
         return torch.sigmoid(output)
 
 if __name__ == "__main__":
-    chdir("POP909/model_train")
     src_vocab_size = 12
     tgt_vocab_size = 12
     d_model = 512
@@ -290,11 +289,13 @@ if __name__ == "__main__":
         trainset = data.DataLoader(trainset, batch_size=1, collate_fn=collate_fn)
         ###
         
-        for i, pair_data in tqdm(enumerate(trainset)):
-            if i == 3:
-                break
+        for i, pair_data in tqdm(enumerate(testset)):
             idx, src_data, tgt_data_with_rates, _ = pair_data
             idx = idx[0]
+            if idx != "853":
+                continue
+            else:
+                print(f"Processing song {idx}")
             #generated_tgt = []
             #print(tgt_data_with_rates.shape)
             current_tgt = tgt_data_with_rates[:, :1, :]  # Use the first step as a starting point
@@ -329,7 +330,7 @@ if __name__ == "__main__":
             loss = criterion(current_tgt[:, 1:, :].contiguous().view(-1), tgt_data_with_rates[:, 1:, :].contiguous().view(-1))
             tot_loss += loss.item()
 
-            torch.save(current_tgt, f'../../song_{idx}_w_rates.pt')
+            torch.save(current_tgt, f'song_{idx}_w_rates.pt')
 
     elif mode == 'debugging':
         # inference step
