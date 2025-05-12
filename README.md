@@ -1,4 +1,4 @@
 # music102
-Project for 6.S966
+To be published in ICMC 2025
 
 
